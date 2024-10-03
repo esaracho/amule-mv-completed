@@ -1,100 +1,110 @@
 #!/bin/bash
 
-set -e
+#set -e
+
+###Parameters
 #name of the downloaded file with full path 
 FILE=$1
 #total time the download was active 
 DTIME=$2
+echo $DTIME >> /home/dietpi/.aMule/mv.log
+
+###Working mode
 #1 for rest (time to share - active download time), any other integer for fixed (fixed time to share)
 MODE=1
-#directory to which the files will be moved
-DIR_COMP=/mnt/disco/amule/completos
-#DTIME parts: time and its unit
-TIME=$(echo $DTIME | cut -d ' ' -f1)
+
+###Directory to which the files will be moved
+DIR_COMP="/mnt/disco/amule/completos"
+
+###DTIME unit (days, hours, minutes, seconds)
 TUNIT=$(echo $DTIME | cut -d ' ' -f2)
-#Time to share in seconds
-TIMESH=86400
+
+###Time to share in minutes
+TIMESH=1440
 
 function mv_completed() {
 
-#difference between sharing time and active download time
-DIFFT=$(($TIMESH - $1))
+	###Difference between sharing time and active download time
+	DIFFT=$(($TIMESH - $1))
+	echo $DIFFT >> /home/dietpi/.aMule/mv.log
 
-if [ $DIFFT -gt 0 ]
+	if [ $DIFFT -gt 0 ]
 
-then
+		then
 
-	sleep $DIFFT; mv $FILE $DIR_COMP
-	amulecmd -c "reload shared" && echo "reload shared" >> /home/dietpi/.aMule/fecha_movido
+			echo "mv $(printf '%q' "$FILE") $DIR_COMP; amulecmd -c \"reload shared\"" | at now +$DIFFT minutes
 
-else
+		else
 
-	mv $FILE $DIR_COMP
-	amulecmd -c "reload shared" && echo "reload shared" >> /home/dietpi/.aMule/fecha_movido
+			mv $(printf '%q' "$FILE") $DIR_COMP; amulecmd -c "reload shared"
 
-fi
-
+	fi
 
 }
 
-#function that converts DTIME to seconds
-function to_seconds() {
+###Function that converts DTIME to minutes
 
-case $1 in
+function to_minutes() {
 
-"s")
+	case $1 in
 
-echo $TIME
+		"s")
 
-;;
-"minutos")
+		echo 1
+		;;
 
-echo $(echo $DTIME | awk -F: '{ print ($1 * 60) + $2}')
+	"minutos")
 
-;;
-"horas")
+		echo $(echo $DTIME | awk -F: '{ print $1}')
+		;;
 
-echo $(echo $DTIME | awk -F: '{ print ($1 * 3600) + ($2 * 60)}')
+	"horas")
 
-;;
-"Días")
+		echo $(echo $DTIME | awk -F: '{ print ($1 * 60) + $2}')
+		;;
 
-#days to seconds
-TIMED=$(echo $DTIME | cut -d ' ' -f1)
-SECD=$(($TIMED * 86400))
+	"Días")
 
-#second part of DTIME
-#time unit: hours, minutes, seconds 
-TUNIT2=$(echo $DTIME | cut -d ' ' -f4)
-#time
-DTIME=$(echo $DTIME | cut -d ' ' -f3,4)
-#to seconds
-SECD2=$(to_seconds $TUNIT2)
+		#days to minutes
+		TIMED=$(echo $DTIME | cut -d ' ' -f1)
+		MIND=$(($TIMED * 1440))
 
-echo $(($SECD + $SECD2))
+		#second part of DTIME
+		#time unit: hours, minutes, seconds 
+		TUNIT2=$(echo $DTIME | cut -d ' ' -f4)
+		#time
+		DTIME=$(echo $DTIME | cut -d ' ' -f3,4)
+		#to minutes
+		MIND2=$(to_minutes $TUNIT2)
 
-;;
+		echo $(($MIND + $MIND2))
+		;;
 
-*)
+	*)
 
-exit 1
+		exit 1
+		;;
 
-;;
-
-esac
+	esac
 
 }
 
-SEC=$(to_seconds $TUNIT)
+###Main
+
+#convert DTIME to minutes
+MIN=$(to_minutes $TUNIT)
+echo $MIN >> /home/dietpi/.aMule/mv.log
+
+#is executed according to the working mode
 
 if [[ $MODE -eq 1 ]]; then
 
 	#time remaining
-	mv_completed $SEC
+	mv_completed $MIN
 
 else
 
 	#fixed time
-	mv_completed 0
+	mv_completed $TIMESH
 
 fi
